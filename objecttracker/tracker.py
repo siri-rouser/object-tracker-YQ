@@ -1,4 +1,5 @@
 import logging
+import objecttracker.Modified_Deepsort
 import time
 import uuid
 from pathlib import Path
@@ -8,7 +9,7 @@ import numpy as np
 import torch
 from boxmot import OCSORT, DeepOCSORT
 from prometheus_client import Counter, Histogram, Summary
-from objecttracker.vision_api.python.visionapi.visionapi.messages_pb2 import SaeMessage
+from visionapi.messages_pb2 import SaeMessage
 from visionlib.pipeline.tools import get_raw_frame_data
 
 from .config import ObjectTrackerConfig, TrackingAlgorithm
@@ -85,6 +86,12 @@ class Tracker:
                 inertia=conf.inertia,
                 use_byte=conf.use_byte
             )
+        elif self.config.tracker_algorithm == TrackingAlgorithm.DEEPSORT:
+            self.tracker = objecttracker.Modified_Deepsort.Modified_Tracker(max_cosine_distance = conf.max_cosine_distance,
+                                                              min_confidence = conf.min_confidence,
+                                                              max_iou_distance = conf.max_iou_distance,
+                                                              max_age = conf.max_age,
+                                                              n_init= conf.n_init)
         else:
             logger.error(f'Unknown tracker algorithm: {self.config.tracker_algorithm}')
             exit(1)
@@ -110,7 +117,8 @@ class Tracker:
             det_array[idx, 4] = detection.confidence
             det_array[idx, 5] = detection.class_id
             # det_array[idx, 6] = detection.feature
-            logger.info(f'feature extract with value{detection.feature}')
+            # logger.info(f'feature extract with shape{len(detection.feature)}')
+            logger.info(det_array[idx])
         return det_array
     
     @PROTO_SERIALIZATION_DURATION.time()

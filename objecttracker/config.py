@@ -7,6 +7,7 @@ from typing import Union
 class TrackingAlgorithm(str, Enum):
     DEEPOCSORT = 'DEEPOCSORT'
     OCSORT = 'OCSORT'
+    DEEPSORT = 'DEEPSORT'
 
 class DeepOcSortConfig(BaseModel):
     model_weights: str
@@ -42,14 +43,19 @@ class RedisConfig(BaseModel):
     host: str = 'localhost'
     port: conint(ge=1, le=65536) = 6379
     stream_id: str
-    input_stream_prefix: str = 'objectdetector'
+    input_stream_prefix: str = 'featureextractor'
     output_stream_prefix: str = 'objecttracker'
 
-
+class DeepSortConfig(BaseModel):
+    max_cosine_distance: float
+    min_confidence: float
+    max_iou_distance: float
+    max_age: int
+    n_init: int
 
 class ObjectTrackerConfig(BaseSettings):
     log_level: LogLevel = LogLevel.WARNING
-    tracker_config: Union[DeepOcSortConfig, OcSortConfig]
+    tracker_config: Union[DeepOcSortConfig, OcSortConfig,DeepSortConfig]
     tracker_algorithm: TrackingAlgorithm
     redis: RedisConfig
     prometheus_port: conint(gt=1024, le=65536) = 8000
