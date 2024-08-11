@@ -16,6 +16,7 @@ class Modified_Tracker:
         self.tracker = DeepSortTracker(metric,max_iou_distance, max_age, n_init) # tracker initalized
 
     def update(self,bboxs,confidence,feats):
+        # for bboxs: we want xywh
         if len(bboxs) == 0:
             self.tracker.predict()
             self.tracker.update([])  

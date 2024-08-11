@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from boxmot import OCSORT, DeepOCSORT
 from prometheus_client import Counter, Histogram, Summary
-from visionapi.messages_pb2 import SaeMessage
+from objecttracker.vision_api.python.visionapi.visionapi.messages_pb2 import SaeMessage
 from visionlib.pipeline.tools import get_raw_frame_data
 
 from .config import ObjectTrackerConfig, TrackingAlgorithm
@@ -43,9 +43,24 @@ class Tracker:
         input_image, sae_msg = self._unpack_proto(input_proto)
         
         inference_start = time.monotonic_ns()
-        det_array = self._prepare_detection_input(sae_msg)
+        tracking_output_array = np.array([])
+        
+        det_array,bbox,confidence,feats,class_ids = self._prepare_detection_input(sae_msg,input_image.shape[:2])
         with MODEL_DURATION.time():
-            tracking_output_array = self.tracker.update(det_array, input_image)
+            if self.config.tracker_algorithm != TrackingAlgorithm.DEEPSORT:
+                tracking_output_array = self.tracker.update(det_array, input_image)
+            elif self.config.tracker_algorithm == TrackingAlgorithm.DEEPSORT:
+                self.tracker.update(bbox, confidence, feats)
+                for index, track in enumerate(self.tracker.tracks):
+                    x, y, w, h = track.bbox
+                    x1, y1, x2, y2 = x, y, x + w, y + h
+                    x1, y1 = max(x1, 0), max(y1, 0)
+                    track_id = track.track_id
+                    feat = track.feat
+                    confidence = track.confidence
+                    tracking_output_array1 = np.array([x1, y1, x2, y2, confidence, track_id])
+
+                logger.info(tracking_output_array1)
 
         OBJECT_COUNTER.inc(len(tracking_output_array))
         
@@ -106,20 +121,39 @@ class Tracker:
 
         return input_image, sae_msg
     
-    def _prepare_detection_input(self, sae_msg: SaeMessage):
+    def _prepare_detection_input(self,sae_msg: SaeMessage,image_shape):
+        width = image_shape[1]
+        heigh = image_shape[0]
+        bbox = []
+        confidence = []
+        feats = []
+        class_ids = []
         det_array = np.zeros((len(sae_msg.detections), 6))
         for idx, detection in enumerate(sae_msg.detections):
+            min_x = detection.bounding_box.min_x * image_shape[1]
+            max_x = detection.bounding_box.max_x * image_shape[1]
+            min_y = detection.bounding_box.min_y * image_shape[0]
+            max_y = detection.bounding_box.max_y * image_shape[0]
+            w = max_x - min_x
+            h = max_y - min_y
+            bbox.append((min_x, min_y, w, h))
+            confidence.append(detection.confidence)
+            # logger.info(type(detection.feature))
+            feats.append(detection.feature)
+            class_ids.append(detection.class_id)
+
             det_array[idx, 0] = detection.bounding_box.min_x
             det_array[idx, 1] = detection.bounding_box.min_y
             det_array[idx, 2] = detection.bounding_box.max_x
             det_array[idx, 3] = detection.bounding_box.max_y
-
             det_array[idx, 4] = detection.confidence
             det_array[idx, 5] = detection.class_id
+            # logger.info(detection)
+
             # det_array[idx, 6] = detection.feature
             # logger.info(f'feature extract with shape{len(detection.feature)}')
-            logger.info(det_array[idx])
-        return det_array
+            # logger.info(detection.feature)
+        return det_array,bbox,confidence,feats,class_ids
     
     @PROTO_SERIALIZATION_DURATION.time()
     def _create_output(self, tracking_output, input_sae_msg: SaeMessage, inference_time_us):
