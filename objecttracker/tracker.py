@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from boxmot import OCSORT, DeepOCSORT
 from prometheus_client import Counter, Histogram, Summary
-from visionapi.messages_pb2 import SaeMessage
+from objecttracker.vision_api.python.visionapi.visionapi.messages_pb2 import SaeMessage
 from visionlib.pipeline.tools import get_raw_frame_data
 
 from .config import ObjectTrackerConfig, TrackingAlgorithm
@@ -109,6 +109,8 @@ class Tracker:
 
             det_array[idx, 4] = detection.confidence
             det_array[idx, 5] = detection.class_id
+            # det_array[idx, 6] = detection.feature
+            logger.info(f'feature extract with value{detection.feature}')
         return det_array
     
     @PROTO_SERIALIZATION_DURATION.time()

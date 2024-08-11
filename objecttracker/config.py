@@ -45,6 +45,8 @@ class RedisConfig(BaseModel):
     input_stream_prefix: str = 'objectdetector'
     output_stream_prefix: str = 'objecttracker'
 
+
+
 class ObjectTrackerConfig(BaseSettings):
     log_level: LogLevel = LogLevel.WARNING
     tracker_config: Union[DeepOcSortConfig, OcSortConfig]
