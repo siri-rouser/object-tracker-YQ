@@ -15,7 +15,7 @@ class Modified_Tracker:
         metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
         self.tracker = DeepSortTracker(metric,max_iou_distance, max_age, n_init) # tracker initalized
 
-    def update(self,bboxs,confidence,feats):
+    def update(self,bboxs,confidence,feats,class_ids):
         # for bboxs: we want xywh
         if len(bboxs) == 0:
             self.tracker.predict()
@@ -24,7 +24,7 @@ class Modified_Tracker:
             return
         dets = []
         for bbox_id, bbox in enumerate(bboxs):
-            dets.append(Detection(bbox, confidence[bbox_id], feats[bbox_id])) 
+            dets.append(Detection(bbox, confidence[bbox_id], feats[bbox_id],class_ids[bbox_id])) 
             # 同时我也认为每一个det[i]是一个实例，每次是在调用这个detection类的下面的实例
             # add detection class into the dets list, and the variable dets is able to use all methods of Detections,e.g dets[0].to_xyah
         # print(f'dets:{dets[bbox_id].feature}')
@@ -46,13 +46,14 @@ class Modified_Tracker:
             bbox = track.detection_bbox[-1]
             feat = track.features[-1]
             confidence = track.confidence[-1]
+            class_id = track.class_id
             # print(len(track.features))
          #   print(len(feat))
             # track.features = []
 
             id = track.track_id
 
-            tracks.append(Track(id, bbox,feat,confidence))
+            tracks.append(Track(id, bbox,feat,confidence,class_id))
 
         self.tracks = tracks
 
@@ -104,8 +105,9 @@ class Track:
     feat = None
     confidence = None
 
-    def __init__(self, id, bbox,feat,confidence):
+    def __init__(self, id, bbox,feat,confidence, class_id):
         self.track_id = id
         self.bbox = bbox
         self.feat = feat
         self.confidence = confidence
+        self.class_id = class_id

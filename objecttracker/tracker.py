@@ -50,7 +50,8 @@ class Tracker:
             if self.config.tracker_algorithm != TrackingAlgorithm.DEEPSORT:
                 tracking_output_array = self.tracker.update(det_array, input_image)
             elif self.config.tracker_algorithm == TrackingAlgorithm.DEEPSORT:
-                self.tracker.update(bbox, confidence, feats)
+                self.tracker.update(bbox, confidence, feats,class_ids)
+                tracking_output_array = np.zeros((len(self.tracker.tracks), 7))
                 for index, track in enumerate(self.tracker.tracks):
                     x, y, w, h = track.bbox
                     x1, y1, x2, y2 = x, y, x + w, y + h
@@ -58,9 +59,11 @@ class Tracker:
                     track_id = track.track_id
                     feat = track.feat
                     confidence = track.confidence
-                    tracking_output_array1 = np.array([x1, y1, x2, y2, confidence, track_id])
+                    class_id = track.class_id
+                    tracking_output_array[index] = np.array([x1, y1, x2, y2, track_id, confidence,class_id])
 
-                logger.info(tracking_output_array1)
+            logger.info(tracking_output_array)
+                # logger.info(len(feat))
 
         OBJECT_COUNTER.inc(len(tracking_output_array))
         
@@ -130,10 +133,16 @@ class Tracker:
         class_ids = []
         det_array = np.zeros((len(sae_msg.detections), 6))
         for idx, detection in enumerate(sae_msg.detections):
+            '''
             min_x = detection.bounding_box.min_x * image_shape[1]
             max_x = detection.bounding_box.max_x * image_shape[1]
             min_y = detection.bounding_box.min_y * image_shape[0]
             max_y = detection.bounding_box.max_y * image_shape[0]
+            '''
+            min_x = detection.bounding_box.min_x 
+            max_x = detection.bounding_box.max_x 
+            min_y = detection.bounding_box.min_y 
+            max_y = detection.bounding_box.max_y            
             w = max_x - min_x
             h = max_y - min_y
             bbox.append((min_x, min_y, w, h))
