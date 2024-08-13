@@ -44,7 +44,7 @@ def run_stage():
     tracker = Tracker(CONFIG)
 
     consume = RedisConsumer(CONFIG.redis.host, CONFIG.redis.port, 
-                            stream_keys=[f'{CONFIG.redis.input_stream_prefix}:{CONFIG.redis.stream_id}'])
+                            stream_keys=[f'{CONFIG.redis.input_stream_prefix}:{id}' for id in CONFIG.redis.stream_ids])
     publish = RedisPublisher(CONFIG.redis.host, CONFIG.redis.port)
 
     with consume, publish:
@@ -66,3 +66,6 @@ def run_stage():
             
             with REDIS_PUBLISH_DURATION.time():
                 publish(f'{CONFIG.redis.output_stream_prefix}:{stream_id}', output_proto_data)
+
+
+#如果是一个tracklet extender的话是不是可以重新再写一个package来调用这边的信息,研究一下这边的tracklet status，然后看看能不能把现在single tracker的tracklets status给沿用下去or加入detection的一部分，or写一个新的sae message，一旦一条tracklet完成single camera tracking之后就把他放到pool里面去（only for non-overlapping FOV?）

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, conint
+from pydantic import BaseModel, conint, conlist
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from visionlib.pipeline.settings import LogLevel, YamlConfigSettingsSource
 from enum import Enum
@@ -42,7 +42,7 @@ class OcSortConfig(BaseModel):
 class RedisConfig(BaseModel):
     host: str = 'localhost'
     port: conint(ge=1, le=65536) = 6379
-    stream_id: str
+    stream_ids: conlist(str)
     input_stream_prefix: str = 'featureextractor'
     output_stream_prefix: str = 'objecttracker'
 
