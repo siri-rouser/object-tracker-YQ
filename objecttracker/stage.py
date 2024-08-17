@@ -5,9 +5,9 @@ import threading
 from prometheus_client import Counter, Histogram, start_http_server
 from visionlib.pipeline.consumer import RedisConsumer
 from visionlib.pipeline.publisher import RedisPublisher
-
 from .config import ObjectTrackerConfig
 from .tracker import Tracker
+from .utils import tracklet_match
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +19,7 @@ def run_stage():
 
     stop_event = threading.Event()
     last_retrieved_id = None
+    proto_data_all = b''
 
     # Register signal handlers
     def sig_handler(signum, _):
@@ -56,16 +57,28 @@ def run_stage():
                 continue
 
             stream_id = stream_key.split(':')[1]
-
+            
             FRAME_COUNTER.inc()
 
-            output_proto_data = tracker.get(proto_data)
+            output_proto_data = tracker.get(proto_data,stream_id)#
 
+            proto_data_all += output_proto_data
+            
             if output_proto_data is None:
                 continue
             
             with REDIS_PUBLISH_DURATION.time():
                 publish(f'{CONFIG.redis.output_stream_prefix}:{stream_id}', output_proto_data)
+            
+            if stream_id == 'stream2':
+                output_multi_camera_tracking_proto_data = tracklet_match(proto_data_all)
+                proto_data_all = b''
+                # if output_proto_data:
+                #     with REDIS_PUBLISH_DURATION.time():
+                #         publish(f'{CONFIG.redis.output_stream_prefix}:aggregate', output_multi_camera_tracking_proto_data)
+
+
+            
 
 
 #如果是一个tracklet extender的话是不是可以重新再写一个package来调用这边的信息,研究一下这边的tracklet status，然后看看能不能把现在single tracker的tracklets status给沿用下去or加入detection的一部分，or写一个新的sae message，一旦一条tracklet完成single camera tracking之后就把他放到pool里面去（only for non-overlapping FOV?）

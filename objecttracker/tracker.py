@@ -13,6 +13,7 @@ from objecttracker.vision_api.python.visionapi.visionapi.messages_pb2 import Sae
 from visionlib.pipeline.tools import get_raw_frame_data
 
 from .config import ObjectTrackerConfig, TrackingAlgorithm
+from .utils import tracklet_info_update,tracklet_status_update,tracklet_match
 
 logging.basicConfig(format='%(asctime)s %(name)-15s %(levelname)-8s %(message)s')
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class Tracker:
 
     @GET_DURATION.time()
     @torch.no_grad()
-    def get(self, input_proto):        
+    def get(self, input_proto,stream_id):        
 
         input_image, sae_msg = self._unpack_proto(input_proto)
         
@@ -48,22 +49,23 @@ class Tracker:
         det_array,bbox,confidence,feats,class_ids = self._prepare_detection_input(sae_msg,input_image.shape[:2])
         with MODEL_DURATION.time():
             if self.config.tracker_algorithm != TrackingAlgorithm.DEEPSORT:
-                tracking_output_array = self.tracker.update(det_array, input_image)
+                tracking_output_array = self.tracker.update(det_array, input_image,sae_msg)
             elif self.config.tracker_algorithm == TrackingAlgorithm.DEEPSORT:
                 self.tracker.update(bbox, confidence, feats,class_ids)
-                tracking_output_array = np.zeros((len(self.tracker.tracks), 7))
-                for index, track in enumerate(self.tracker.tracks):
-                    x, y, w, h = track.bbox
-                    x1, y1, x2, y2 = x, y, x + w, y + h
-                    x1, y1 = max(x1, 0), max(y1, 0)
-                    track_id = track.track_id
-                    feat = track.feat
-                    confidence = track.confidence
-                    class_id = track.class_id
-                    tracking_output_array[index] = np.array([x1, y1, x2, y2, track_id, confidence,class_id])
+                tracking_output_array, out_features, age = self._trackingreusltprocess()
 
-            logger.info(tracking_output_array)
+            # logger.info(tracking_output_array)
                 # logger.info(len(feat))
+
+        # for the extender
+        #camera_id and track_id think about
+        # maybe only for non-overlapping situation?
+        if self.config.tracker_config.extender:
+            sae_msg = tracklet_info_update(stream_id,tracking_output_array,out_features,age,sae_msg)
+            sae_msg = tracklet_status_update(stream_id,sae_msg)
+   
+            #if stream_id == 'stream1': # the match will be conduct every frame after stream1 status already been updated
+            # tracklet_match(stream_id,sae_msg)
 
         OBJECT_COUNTER.inc(len(tracking_output_array))
         
@@ -164,10 +166,29 @@ class Tracker:
             # logger.info(detection.feature)
         return det_array,bbox,confidence,feats,class_ids
     
+    def _trackingreusltprocess(self):
+        tracking_output_array = np.zeros((len(self.tracker.tracks), 7))
+        features = []
+        age = []
+        for index, track in enumerate(self.tracker.tracks):
+            x, y, w, h = track.bbox
+            x1, y1, x2, y2 = x, y, x + w, y + h
+            x1, y1 = max(x1, 0), max(y1, 0)
+            track_id = track.track_id
+            features.append(track.feat)
+            confidence = track.confidence
+            class_id = track.class_id
+            tracking_output_array[index] = np.array([x1, y1, x2, y2, track_id, confidence,class_id])
+            age.append(track.age)
+
+        return tracking_output_array,features,age
+
+    
     @PROTO_SERIALIZATION_DURATION.time()
     def _create_output(self, tracking_output, input_sae_msg: SaeMessage, inference_time_us):
         output_sae_msg = SaeMessage()
         output_sae_msg.frame.CopyFrom(input_sae_msg.frame)
+        output_sae_msg.trajectory.CopyFrom(input_sae_msg.trajectory)
 
         # The length of detections and tracking_output can be different 
         # (as the latter only includes objects that could be matched to an id)

@@ -28,6 +28,7 @@ class DeepOcSortConfig(BaseModel):
     cmc_off: bool
     aw_off: bool
     new_kf_off: bool
+    extender: bool
 
 class OcSortConfig(BaseModel):
     det_thresh: float
@@ -38,6 +39,7 @@ class OcSortConfig(BaseModel):
     asso_func: str
     inertia: float
     use_byte: bool
+    extender: bool
 
 class RedisConfig(BaseModel):
     host: str = 'localhost'
@@ -52,6 +54,7 @@ class DeepSortConfig(BaseModel):
     max_iou_distance: float
     max_age: int
     n_init: int
+    extender : bool
 
 class ObjectTrackerConfig(BaseSettings):
     log_level: LogLevel = LogLevel.WARNING

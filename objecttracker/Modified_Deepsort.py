@@ -47,13 +47,14 @@ class Modified_Tracker:
             feat = track.features[-1]
             confidence = track.confidence[-1]
             class_id = track.class_id
+            age = track.age
             # print(len(track.features))
-         #   print(len(feat))
+            # print(len(feat))
             # track.features = []
 
             id = track.track_id
 
-            tracks.append(Track(id, bbox,feat,confidence,class_id))
+            tracks.append(Track(id, bbox,feat,confidence,class_id,age))
 
         self.tracks = tracks
 
@@ -105,9 +106,10 @@ class Track:
     feat = None
     confidence = None
 
-    def __init__(self, id, bbox,feat,confidence, class_id):
+    def __init__(self, id, bbox,feat,confidence, class_id,age):
         self.track_id = id
         self.bbox = bbox
         self.feat = feat
         self.confidence = confidence
         self.class_id = class_id
+        self.age = age
