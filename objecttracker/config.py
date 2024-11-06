@@ -30,6 +30,7 @@ class DeepOcSortConfig(BaseModel):
     new_kf_off: bool
     extender: bool
 
+
 class OcSortConfig(BaseModel):
     det_thresh: float
     max_age: int
@@ -40,6 +41,7 @@ class OcSortConfig(BaseModel):
     inertia: float
     use_byte: bool
     extender: bool
+    
 
 class RedisConfig(BaseModel):
     host: str = 'localhost'
@@ -54,16 +56,18 @@ class DeepSortConfig(BaseModel):
     max_iou_distance: float
     max_age: int
     n_init: int
-    extender : bool
+    multi_camera_tracking : bool
+    window_ms: float
 
 class ObjectTrackerConfig(BaseSettings):
     log_level: LogLevel = LogLevel.WARNING
     tracker_config: Union[DeepOcSortConfig, OcSortConfig,DeepSortConfig]
     tracker_algorithm: TrackingAlgorithm
     redis: RedisConfig
+    output_stream_id: str = 'merged'
     prometheus_port: conint(gt=1024, le=65536) = 8000
-
     model_config = SettingsConfigDict(env_nested_delimiter='__')
+    
 
     @classmethod
     def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):

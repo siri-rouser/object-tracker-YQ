@@ -1,6 +1,7 @@
 import logging
 import signal
 import threading
+from typing import List, Tuple
 
 from prometheus_client import Counter, Histogram, start_http_server
 from visionlib.pipeline.consumer import RedisConsumer
@@ -19,7 +20,6 @@ def run_stage():
 
     stop_event = threading.Event()
     last_retrieved_id = None
-    proto_data_all = b''
 
     # Register signal handlers
     def sig_handler(signum, _):
@@ -41,13 +41,13 @@ def run_stage():
 
     logger.info(f'Starting object tracker stage. Config: {CONFIG.model_dump_json(indent=2)}')
 
-    # Init Detector
+    # Init tracker
     tracker = Tracker(CONFIG)
 
     consume = RedisConsumer(CONFIG.redis.host, CONFIG.redis.port, 
                             stream_keys=[f'{CONFIG.redis.input_stream_prefix}:{id}' for id in CONFIG.redis.stream_ids])
     publish = RedisPublisher(CONFIG.redis.host, CONFIG.redis.port)
-
+    
     with consume, publish:
         for stream_key, proto_data in consume():
             if stop_event.is_set():
@@ -60,25 +60,23 @@ def run_stage():
             
             FRAME_COUNTER.inc()
 
-            output_proto_data = tracker.get(proto_data,stream_id)#
-
-            proto_data_all += output_proto_data
+            output_records: List[Tuple[str, bytes]]= tracker.get(proto_data,stream_id) #track_id in stream1 is postive and in stream2 is negative
             
-            if output_proto_data is None:
+            if output_records is None:
+                logger.info('No output records')
                 continue
             
-            with REDIS_PUBLISH_DURATION.time():
-                publish(f'{CONFIG.redis.output_stream_prefix}:{stream_id}', output_proto_data)
-            
-            if stream_id == 'stream2':
-                output_multi_camera_tracking_proto_data = tracklet_match(proto_data_all)
-                proto_data_all = b''
-                # if output_proto_data:
-                #     with REDIS_PUBLISH_DURATION.time():
-                #         publish(f'{CONFIG.redis.output_stream_prefix}:aggregate', output_multi_camera_tracking_proto_data)
+            # with REDIS_PUBLISH_DURATION.time():
+            #     publish(f'{CONFIG.redis.output_stream_prefix}:{stream_id}', output_proto_data)
+            #     publish(f'{CONFIG.redis.output_stream_prefix}:aggregate', output_proto_data)
+
+            for stream_id, output_proto_data in output_records:
+                with REDIS_PUBLISH_DURATION.time():
+                    publish(f'{CONFIG.redis.output_stream_prefix}:{stream_id}', output_proto_data) # the stream_id in here is 'merged'
 
 
-            
+       
 
+                
 
 #如果是一个tracklet extender的话是不是可以重新再写一个package来调用这边的信息,研究一下这边的tracklet status，然后看看能不能把现在single tracker的tracklets status给沿用下去or加入detection的一部分，or写一个新的sae message，一旦一条tracklet完成single camera tracking之后就把他放到pool里面去（only for non-overlapping FOV?）
