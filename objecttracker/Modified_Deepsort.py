@@ -15,7 +15,7 @@ class Modified_Tracker:
         metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
         self.tracker = DeepSortTracker(metric,max_iou_distance, max_age, n_init) # tracker initalized
 
-    def update(self,bboxs,confidence,feats,class_ids,stream_id):
+    def update(self,bboxs,confidence,feats,class_ids):
         # for bboxs: we want xywh
         if len(bboxs) == 0:
             self.tracker.predict()
@@ -30,7 +30,7 @@ class Modified_Tracker:
         # print(f'dets:{dets[bbox_id].feature}')
 
         self.tracker.predict()
-        self.tracker.update(dets,stream_id)
+        self.tracker.update(dets)
     #    matched_feature = self.result_match(bboxs,feats)
         self.update_tracks()
 

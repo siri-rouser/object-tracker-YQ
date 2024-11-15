@@ -8,7 +8,7 @@ from visionlib.pipeline.consumer import RedisConsumer
 from visionlib.pipeline.publisher import RedisPublisher
 from .config import ObjectTrackerConfig
 from .tracker import Tracker
-from .utils import tracklet_match
+
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ def run_stage():
     tracker = Tracker(CONFIG)
 
     consume = RedisConsumer(CONFIG.redis.host, CONFIG.redis.port, 
-                            stream_keys=[f'{CONFIG.redis.input_stream_prefix}:{id}' for id in CONFIG.redis.stream_ids])
+                            stream_keys=[f'{CONFIG.redis.input_stream_prefix}:{CONFIG.redis.stream_id}'])
     publish = RedisPublisher(CONFIG.redis.host, CONFIG.redis.port)
     
     with consume, publish:
@@ -59,10 +59,11 @@ def run_stage():
             stream_id = stream_key.split(':')[1]
             
             FRAME_COUNTER.inc()
+            print('works')
 
-            output_records: List[Tuple[str, bytes]]= tracker.get(proto_data,stream_id) #track_id in stream1 is postive and in stream2 is negative
+            output_proto_data = tracker.get(proto_data,stream_id) #track_id in stream1 is postive and in stream2 is negative
             
-            if output_records is None:
+            if output_proto_data is None:
                 logger.info('No output records')
                 continue
             
@@ -70,9 +71,8 @@ def run_stage():
             #     publish(f'{CONFIG.redis.output_stream_prefix}:{stream_id}', output_proto_data)
             #     publish(f'{CONFIG.redis.output_stream_prefix}:aggregate', output_proto_data)
 
-            for stream_id, output_proto_data in output_records:
-                with REDIS_PUBLISH_DURATION.time():
-                    publish(f'{CONFIG.redis.output_stream_prefix}:{stream_id}', output_proto_data) # the stream_id in here is 'merged'
+            with REDIS_PUBLISH_DURATION.time():
+                publish(f'{CONFIG.redis.output_stream_prefix}:{stream_id}', output_proto_data) # the stream_id in here is 'merged'
 
 
        

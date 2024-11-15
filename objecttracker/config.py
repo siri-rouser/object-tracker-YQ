@@ -46,7 +46,7 @@ class OcSortConfig(BaseModel):
 class RedisConfig(BaseModel):
     host: str = 'localhost'
     port: conint(ge=1, le=65536) = 6379
-    stream_ids: conlist(str)
+    stream_id: str
     input_stream_prefix: str = 'featureextractor'
     output_stream_prefix: str = 'objecttracker'
 
@@ -57,14 +57,12 @@ class DeepSortConfig(BaseModel):
     max_age: int
     n_init: int
     multi_camera_tracking : bool
-    window_ms: float
 
 class ObjectTrackerConfig(BaseSettings):
     log_level: LogLevel = LogLevel.WARNING
     tracker_config: Union[DeepOcSortConfig, OcSortConfig,DeepSortConfig]
     tracker_algorithm: TrackingAlgorithm
     redis: RedisConfig
-    output_stream_id: str = 'merged'
     prometheus_port: conint(gt=1024, le=65536) = 8000
     model_config = SettingsConfigDict(env_nested_delimiter='__')
     
