@@ -59,9 +59,8 @@ class Tracker:
                 self.tracker.update(bbox,confidence,feats,class_ids,input_image)
                 tracking_output_array, out_features = self._trackingreusltprocess1()
 
-
         if self.config.tracker_config.multi_camera_tracking:
-            self._tracklet_info_update(stream_id,tracking_output_array,out_features,sae_msg)
+            sae_msg = self._tracklet_info_update(stream_id,tracking_output_array,out_features,input_image,sae_msg)
 
         OBJECT_COUNTER.inc(len(tracking_output_array))
         
@@ -212,38 +211,48 @@ class Tracker:
             
         return tracking_output_array,features
 
-    def _tracklet_info_update(self,stream_id,tracking_output_array,out_features,sae_msg: SaeMessage):
-        if stream_id not in sae_msg.trajectory.cameras:
-            sae_msg.trajectory.cameras[stream_id].CopyFrom(TrackletsByCamera())
+    def _tracklet_info_update(self,stream_id,tracking_output_array,out_features,input_image,sae_msg: SaeMessage):
+        '''
+        This function serves tracking_output from the tracker at first and saves/update the tracklet information to SaeMessgae.trajectory of current saeframe!!!
 
-        # tracking_output_arrary = [x1, y1, x2, y2, track_id, confidence,class_id]
+        checked, functionality works ok? but the detection info add seems to be redundant
+        '''
+        height = input_image.shape[0]
+        width = input_image.shape[1]
+        
+        sae_msg.trajectory.cameras[stream_id].CopyFrom(TrackletsByCamera())
+
+        # tracking_output_arrary = [x1, y1, x2, y2, track_id, confidence, class_id, age]
         tracklet = Tracklet()
 
         for index,output_array in enumerate(tracking_output_array):
             x1, y1, x2, y2, track_id, confidence, class_id, age = output_array
-
+            feature = out_features[index]
             track_id = str(track_id)
             if track_id not in sae_msg.trajectory.cameras[stream_id].tracklets:
-                # Create a new Tracklet if it doesn't exist
-                tracklet = Tracklet()
+                tracklet = Tracklet() # Create a new Tracklet if it doesn't exist
                 tracklet.mean_feature.extend(out_features[index])
                 tracklet.status = 'Active'
                 tracklet.start_time = sae_msg.frame.timestamp_utc_ms
                 tracklet.end_time = sae_msg.frame.timestamp_utc_ms
                 tracklet.age = int(age)
-                # for detection_info
-                detection = tracklet.detections_info.add()
-                detection.bounding_box.min_x = x1
-                detection.bounding_box.min_y = y1
-                detection.bounding_box.max_x = x2
 
-                detection.bounding_box.max_y = y2
+                # for detection_info
+                #NOTE: double-check if it is necessary to add the detection information
+                detection = tracklet.detections_info.add()
+                detection.bounding_box.min_x = float(x1) / width
+                detection.bounding_box.min_y = float(y1) / height
+                detection.bounding_box.max_x = float(x2) / width
+                detection.bounding_box.max_y = float(y2) / height
                 detection.confidence = confidence
                 detection.class_id = int(class_id)
                 detection.feature.extend(out_features[index])
 
                 # Add the new tracklet to the tracklets map
                 sae_msg.trajectory.cameras[stream_id].tracklets[track_id].CopyFrom(tracklet)
+            
+        return sae_msg 
+
     
     
     @PROTO_SERIALIZATION_DURATION.time()
