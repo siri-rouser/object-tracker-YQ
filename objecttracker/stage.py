@@ -9,7 +9,6 @@ from visionlib.pipeline.publisher import RedisPublisher
 from .config import ObjectTrackerConfig
 from .tracker import Tracker
 
-
 logger = logging.getLogger(__name__)
 
 REDIS_PUBLISH_DURATION = Histogram('object_tracker_redis_publish_duration', 'The time it takes to push a message onto the Redis stream',
@@ -59,7 +58,6 @@ def run_stage():
             stream_id = stream_key.split(':')[1]
             
             FRAME_COUNTER.inc()
-            print('works')
 
             output_proto_data = tracker.get(proto_data,stream_id) #track_id in stream1 is postive and in stream2 is negative
             

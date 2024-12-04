@@ -8,6 +8,7 @@ class TrackingAlgorithm(str, Enum):
     DEEPOCSORT = 'DEEPOCSORT'
     OCSORT = 'OCSORT'
     DEEPSORT = 'DEEPSORT'
+    SMILETRACK = 'SMILETRACK'
 
 class DeepOcSortConfig(BaseModel):
     model_weights: str
@@ -58,9 +59,22 @@ class DeepSortConfig(BaseModel):
     n_init: int
     multi_camera_tracking : bool
 
+class SmileTrackConfig(BaseModel):
+    min_confidence: float
+    multi_camera_tracking : bool
+    track_low_thresh: float
+    track_high_thresh: float
+    new_track_thresh: float
+    track_buffer: int
+    proximity_thresh: float
+    appearance_thresh: float
+    with_reid: bool
+    match_thresh: float
+    frame_rate: int
+
 class ObjectTrackerConfig(BaseSettings):
     log_level: LogLevel = LogLevel.WARNING
-    tracker_config: Union[DeepOcSortConfig, OcSortConfig,DeepSortConfig]
+    tracker_config: Union[DeepOcSortConfig, OcSortConfig,DeepSortConfig,SmileTrackConfig]
     tracker_algorithm: TrackingAlgorithm
     redis: RedisConfig
     prometheus_port: conint(gt=1024, le=65536) = 8000

@@ -22,6 +22,7 @@ prometheus-client = "^0.17.1"
 boxmot = "10.0.64"
 google = "^3.0.0"
 protobuf = "^5.27.3"
+einops = "0.8.0"
 
 [build-system]
 requires = ["poetry-core"]

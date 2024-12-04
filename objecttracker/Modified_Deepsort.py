@@ -12,6 +12,7 @@ class Modified_Tracker:
         # max_cosine_distance = 0.2 # Try different value, the yt video suggest to set 0.4
         nn_budget = None
         # min_confidence=0.2 # the confidence is settled in the YOLOv8 detection part as well
+        
         metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
         self.tracker = DeepSortTracker(metric,max_iou_distance, max_age, n_init) # tracker initalized
 
@@ -47,14 +48,14 @@ class Modified_Tracker:
             feat = track.features[-1]
             confidence = track.confidence[-1]
             class_id = track.class_id
-            age = track.age
+            time_since_update = track.time_since_update
             # print(len(track.features))
             # print(len(feat))
             # track.features = []
 
             id = track.track_id
 
-            tracks.append(Track(id, bbox,feat,confidence,class_id,age))
+            tracks.append(Track(id, bbox,feat,confidence,class_id,time_since_update))
 
         self.tracks = tracks
 
@@ -104,12 +105,13 @@ class Track:
     track_id = None
     bbox = None
     feat = None
+    class_id = None
     confidence = None
 
-    def __init__(self, id, bbox,feat,confidence, class_id,age):
+    def __init__(self, id, bbox,feat,confidence, class_id,time_since_update):
         self.track_id = id
         self.bbox = bbox
         self.feat = feat
         self.confidence = confidence
         self.class_id = class_id
-        self.age = age
+        self.time_since_update = time_since_update

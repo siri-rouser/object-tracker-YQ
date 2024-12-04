@@ -7,13 +7,15 @@ from typing import Any
 from typing import List, Tuple
 import numpy as np
 import cv2
+import objecttracker.Modified_SMILEtrack
 import torch
 from boxmot import OCSORT, DeepOCSORT
 from prometheus_client import Counter, Histogram, Summary
 from visionlib.pipeline.tools import get_raw_frame_data
-from visionapi_yq.messages_pb2 import SaeMessage, TrackletsByCamera,Trajectory,Tracklet
 
 from .config import ObjectTrackerConfig, TrackingAlgorithm
+
+from visionapi_yq.messages_pb2 import SaeMessage, TrackletsByCamera,Trajectory,Tracklet
 
 logging.basicConfig(format='%(asctime)s %(name)-15s %(levelname)-8s %(message)s')
 logger = logging.getLogger(__name__)
@@ -31,8 +33,6 @@ class Tracker:
     def __init__(self, config: ObjectTrackerConfig) -> None:
         self.config = config
         logger.setLevel(self.config.log_level.value)
-        # self.txtfile = open("tracklet.txt","a")
-
         self.object_id_seed = uuid.uuid4()
         self._setup()
         
@@ -50,19 +50,23 @@ class Tracker:
         det_array,bbox,confidence,feats,class_ids = self._prepare_detection_input(sae_msg,input_image)
         
         with MODEL_DURATION.time():
-            if self.config.tracker_algorithm != TrackingAlgorithm.DEEPSORT:
+            if self.config.tracker_algorithm == TrackingAlgorithm.DEEPOCSORT:
                 tracking_output_array = self.tracker.update(det_array, input_image,sae_msg)
             elif self.config.tracker_algorithm == TrackingAlgorithm.DEEPSORT:
-                self.tracker.update(bbox, confidence, feats, class_ids)
-                tracking_output_array, out_features = self._trackingreusltprocess(sae_msg.frame.timestamp_utc_ms)
+                self.tracker.update(bbox, confidence, feats,class_ids,stream_id)
+                tracking_output_array, out_features = self._trackingreusltprocess()
+            elif self.config.tracker_algorithm == TrackingAlgorithm.SMILETRACK:
+                self.tracker.update(bbox,confidence,feats,class_ids,input_image)
+                tracking_output_array, out_features = self._trackingreusltprocess1()
+
 
         if self.config.tracker_config.multi_camera_tracking:
-            sae_msg = self._tracklet_info_update(stream_id,tracking_output_array,out_features,input_image,sae_msg)
+            self._tracklet_info_update(stream_id,tracking_output_array,out_features,sae_msg)
 
         OBJECT_COUNTER.inc(len(tracking_output_array))
         
         inference_time_us = (time.monotonic_ns() - inference_start) // 1000
-        return self._create_output(tracking_output_array, input_image, sae_msg, inference_time_us)
+        return self._create_output(tracking_output_array, sae_msg, inference_time_us)
         
     def _setup(self):
         conf = self.config.tracker_config
@@ -104,6 +108,16 @@ class Tracker:
                                                               max_iou_distance = conf.max_iou_distance,
                                                               max_age = conf.max_age,
                                                               n_init= conf.n_init)
+        elif self.config.tracker_algorithm == TrackingAlgorithm.SMILETRACK: 
+            self.tracker = objecttracker.Modified_SMILEtrack.Modified_Tracker(  track_low_thresh = conf.track_low_thresh,
+                                                                                track_high_thresh = conf.track_high_thresh,
+                                                                                new_track_thresh = conf.new_track_thresh,
+                                                                                track_buffer = conf.track_buffer,
+                                                                                proximity_thresh = conf.proximity_thresh,
+                                                                                appearance_thresh = conf.appearance_thresh,
+                                                                                with_reid = conf.with_reid,
+                                                                                match_thresh = conf.match_thresh,
+                                                                                frame_rate = conf.frame_rate)
         else:
             logger.error(f'Unknown tracker algorithm: {self.config.tracker_algorithm}')
             exit(1)
@@ -126,8 +140,9 @@ class Tracker:
 
         separately
         '''
-        height = img.shape[0]
+
         width = img.shape[1]
+        heigh = img.shape[0]
         bbox = []
         confidence = []
         feats = []
@@ -135,16 +150,15 @@ class Tracker:
         det_array = np.zeros((len(sae_msg.detections), 6))
         for idx, detection in enumerate(sae_msg.detections):
             '''
+            min_x = detection.bounding_box.min_x * image_shape[1]
+            max_x = detection.bounding_box.max_x * image_shape[1]
+            min_y = detection.bounding_box.min_y * image_shape[0]
+            max_y = detection.bounding_box.max_y * image_shape[0]
+            '''
             min_x = detection.bounding_box.min_x 
             max_x = detection.bounding_box.max_x 
             min_y = detection.bounding_box.min_y 
-            max_y = detection.bounding_box.max_y   
-            '''
-
-            min_x = detection.bounding_box.min_x * width
-            max_x = detection.bounding_box.max_x * width
-            min_y = detection.bounding_box.min_y * height
-            max_y = detection.bounding_box.max_y * height       
+            max_y = detection.bounding_box.max_y            
             w = max_x - min_x
             h = max_y - min_y
             bbox.append((min_x, min_y, w, h))
@@ -166,7 +180,7 @@ class Tracker:
             # logger.info(detection.feature)
         return det_array,bbox,confidence,feats,class_ids
     
-    def _trackingreusltprocess(self,currenttime):
+    def _trackingreusltprocess(self):
         tracking_output_array = np.zeros((len(self.tracker.tracks), 8))
         features = []
         for index, track in enumerate(self.tracker.tracks):
@@ -179,58 +193,61 @@ class Tracker:
             class_id = track.class_id
             age = track.age
             tracking_output_array[index] = np.array([x1, y1, x2, y2, track_id, confidence,class_id, age])
-            # output_line = f"{currenttime} {track_id} {class_id} {age} {x1} {y1} {x2} {y2}\n"
-            # self.txtfile.write(output_line)
-
+        
         return tracking_output_array,features
     
-    def _tracklet_info_update(self,stream_id,tracking_output_array,out_features,input_image,sae_msg: SaeMessage):
-        '''
-        This function serves tracking_output from the tracker at first and saves/update the tracklet information to SaeMessgae.trajectory of current saeframe!!!
+    def _trackingreusltprocess1(self):
+        tracking_output_array = np.zeros((len(self.tracker.tracks), 8))
+        features = []
+        for index, track in enumerate(self.tracker.tracks):
+            x, y, w, h = track.bbox
+            x1, y1, x2, y2 = x, y, x + w, y + h
+            x1, y1 = max(x1, 0), max(y1, 0)
+            track_id = track.track_id
+            features.append(track.feat)
+            confidence = track.confidence
+            class_id = track.class_id
+            age = 0
+            tracking_output_array[index] = np.array([x1, y1, x2, y2, track_id, confidence,class_id, age])
+            
+        return tracking_output_array,features
 
-        checked, functionality works ok? but the detection info add seems to be redundant
-        '''
-        height = input_image.shape[0]
-        width = input_image.shape[1]
-        
-        sae_msg.trajectory.cameras[stream_id].CopyFrom(TrackletsByCamera())
+    def _tracklet_info_update(self,stream_id,tracking_output_array,out_features,sae_msg: SaeMessage):
+        if stream_id not in sae_msg.trajectory.cameras:
+            sae_msg.trajectory.cameras[stream_id].CopyFrom(TrackletsByCamera())
 
-        # tracking_output_arrary = [x1, y1, x2, y2, track_id, confidence, class_id, age]
+        # tracking_output_arrary = [x1, y1, x2, y2, track_id, confidence,class_id]
         tracklet = Tracklet()
 
         for index,output_array in enumerate(tracking_output_array):
             x1, y1, x2, y2, track_id, confidence, class_id, age = output_array
-            feature = out_features[index]
+
             track_id = str(track_id)
             if track_id not in sae_msg.trajectory.cameras[stream_id].tracklets:
-                tracklet = Tracklet() # Create a new Tracklet if it doesn't exist
+                # Create a new Tracklet if it doesn't exist
+                tracklet = Tracklet()
                 tracklet.mean_feature.extend(out_features[index])
                 tracklet.status = 'Active'
                 tracklet.start_time = sae_msg.frame.timestamp_utc_ms
                 tracklet.end_time = sae_msg.frame.timestamp_utc_ms
                 tracklet.age = int(age)
-
                 # for detection_info
-                #NOTE: double-check if it is necessary to add the detection information
                 detection = tracklet.detections_info.add()
-                detection.bounding_box.min_x = float(x1) / width
-                detection.bounding_box.min_y = float(y1) / height
-                detection.bounding_box.max_x = float(x2) / width
-                detection.bounding_box.max_y = float(y2) / height
+                detection.bounding_box.min_x = x1
+                detection.bounding_box.min_y = y1
+                detection.bounding_box.max_x = x2
+
+                detection.bounding_box.max_y = y2
                 detection.confidence = confidence
                 detection.class_id = int(class_id)
                 detection.feature.extend(out_features[index])
 
                 # Add the new tracklet to the tracklets map
                 sae_msg.trajectory.cameras[stream_id].tracklets[track_id].CopyFrom(tracklet)
-            
-        return sae_msg 
-
+    
     
     @PROTO_SERIALIZATION_DURATION.time()
-    def _create_output(self, tracking_output, image, input_sae_msg: SaeMessage, inference_time_us):
-        height = image.shape[0]
-        width = image.shape[1]
+    def _create_output(self, tracking_output, input_sae_msg: SaeMessage, inference_time_us):
         output_sae_msg = SaeMessage()
         output_sae_msg.frame.CopyFrom(input_sae_msg.frame)
         output_sae_msg.trajectory.CopyFrom(input_sae_msg.trajectory)
@@ -238,16 +255,16 @@ class Tracker:
         # The length of detections and tracking_output can be different 
         # (as the latter only includes objects that could be matched to an id)
         # Therefore, we can only reuse the VideoFrame and have to recreate everything else
-        
         for pred in tracking_output:
             detection = output_sae_msg.detections.add()
-            detection.bounding_box.min_x = float(pred[0])/ width
-            detection.bounding_box.min_y = float(pred[1]) / height
-            detection.bounding_box.max_x = float(pred[2]) / width
-            detection.bounding_box.max_y = float(pred[3]) / height
+            detection.bounding_box.min_x = float(pred[0])
+            detection.bounding_box.min_y = float(pred[1])
+            detection.bounding_box.max_x = float(pred[2])
+            detection.bounding_box.max_y = float(pred[3])
 
             # detection.object_id = uuid.uuid3(self.object_id_seed, str(int(pred[4]))).bytes
             detection.object_id = int(pred[4])
+
             detection.confidence = float(pred[5])
             detection.class_id = int(pred[6])
 
