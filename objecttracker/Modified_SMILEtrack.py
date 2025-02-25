@@ -82,7 +82,7 @@ class Modified_Tracker:
 
         self.tracker = SMILEtrack(opt,frame_rate) # tracker initalized
 
-    def update(self,bboxs,confidence,feats,class_ids,img):
+    def update(self,bboxs,confidence,feats,class_ids,img,det_array):
 
         if len(bboxs) == 0:
            # self.tracker.predict() SIMLEtrack do not have .predict() function
@@ -93,11 +93,13 @@ class Modified_Tracker:
         detections = []
 
         for bbox_id, bbox in enumerate(bboxs):
+            
             x, y, w, h= bbox
             x_min,y_min = x,y
             x_max, y_max = x + w, y + h
             # Create a new array for each detection
-            det = np.array([x_min, y_min, x_max, y_max, confidence[bbox_id], class_ids[bbox_id]])
+            lat,lon = det_array[bbox_id,6], det_array[bbox_id,7]
+            det = np.array([x_min, y_min, x_max, y_max, confidence[bbox_id], class_ids[bbox_id],lat,lon])
             # Append the detection and the features
             if len(feats[bbox_id]) != 2048: #the recheck of feats dimension
                 print('??? feature dimension is not equal to 2048x1')
@@ -121,6 +123,7 @@ class Modified_Tracker:
             bbox = temp_res.tlwh
             features_deque = temp_res.features
             class_id = temp_res.cls
+            lat,lon = temp_res.lat, temp_res.lon
             
             if len(features_deque) > 0:
                 
@@ -138,7 +141,7 @@ class Modified_Tracker:
             # print(f'{len(temp_results)} tracks in this frame'
             id = temp_res.track_id
 
-            tracks.append(Track(id, bbox,feat,confidence,class_id))
+            tracks.append(Track(id, bbox,feat,confidence,class_id,lat,lon))
 
         self.tracks = tracks
 
@@ -148,10 +151,14 @@ class Track:
     feat = None
     confidence = None
     class_id = None
+    lat = None
+    lon = None
 
-    def __init__(self, id, bbox,feat,confidence,class_id):
+    def __init__(self, id, bbox, feat, confidence, class_id, lat, lon):
         self.track_id = id
         self.bbox = bbox
         self.feat = feat
         self.confidence = confidence
         self.class_id = class_id
+        self.lat = lat
+        self.lon = lon

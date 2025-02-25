@@ -9,7 +9,7 @@ import numpy as np
 import cv2
 import objecttracker.Modified_SMILEtrack
 import torch
-from boxmot import OCSORT, DeepOCSORT
+# from boxmot import OCSORT, DeepOCSORT
 from prometheus_client import Counter, Histogram, Summary
 from visionlib.pipeline.tools import get_raw_frame_data
 
@@ -56,7 +56,7 @@ class Tracker:
                 self.tracker.update(bbox, confidence, feats,class_ids,stream_id)
                 tracking_output_array, out_features = self._trackingreusltprocess()
             elif self.config.tracker_algorithm == TrackingAlgorithm.SMILETRACK:
-                self.tracker.update(bbox,confidence,feats,class_ids,input_image)
+                self.tracker.update(bbox,confidence,feats,class_ids,input_image,det_array)
                 tracking_output_array, out_features = self._trackingreusltprocess1()
 
         if self.config.tracker_config.multi_camera_tracking:
@@ -146,7 +146,7 @@ class Tracker:
         confidence = []
         feats = []
         class_ids = []
-        det_array = np.zeros((len(sae_msg.detections), 6))
+        det_array = np.zeros((len(sae_msg.detections), 8))
         for idx, detection in enumerate(sae_msg.detections):
             '''
             min_x = detection.bounding_box.min_x * image_shape[1]
@@ -172,6 +172,8 @@ class Tracker:
             det_array[idx, 3] = detection.bounding_box.max_y
             det_array[idx, 4] = detection.confidence
             det_array[idx, 5] = detection.class_id
+            det_array[idx, 6] = detection.geo_coordinate.latitude
+            det_array[idx, 7] = detection.geo_coordinate.longitude
             # logger.info(detection)
 
             # det_array[idx, 6] = detection.feature
@@ -196,7 +198,7 @@ class Tracker:
         return tracking_output_array,features
     
     def _trackingreusltprocess1(self):
-        tracking_output_array = np.zeros((len(self.tracker.tracks), 8))
+        tracking_output_array = np.zeros((len(self.tracker.tracks), 10))
         features = []
         for index, track in enumerate(self.tracker.tracks):
             x, y, w, h = track.bbox
@@ -206,8 +208,10 @@ class Tracker:
             features.append(track.feat)
             confidence = track.confidence
             class_id = track.class_id
+            lat = track.lat
+            lon = track.lon
             age = 0
-            tracking_output_array[index] = np.array([x1, y1, x2, y2, track_id, confidence,class_id, age])
+            tracking_output_array[index] = np.array([x1, y1, x2, y2, track_id, confidence,class_id, age, lat, lon])
             
         return tracking_output_array,features
 
@@ -222,35 +226,53 @@ class Tracker:
         
         sae_msg.trajectory.cameras[stream_id].CopyFrom(TrackletsByCamera())
 
-        # tracking_output_arrary = [x1, y1, x2, y2, track_id, confidence, class_id, age]
-        tracklet = Tracklet()
+        # # tracking_output_arrary = [x1, y1, x2, y2, track_id, confidence, class_id, age, lat, lon]
+        # tracklet = Tracklet()
 
         for index,output_array in enumerate(tracking_output_array):
-            x1, y1, x2, y2, track_id, confidence, class_id, age = output_array
+            x1, y1, x2, y2, track_id, confidence, class_id, age, lat, lon = output_array
             feature = out_features[index]
             track_id = str(track_id)
             if track_id not in sae_msg.trajectory.cameras[stream_id].tracklets:
-                tracklet = Tracklet() # Create a new Tracklet if it doesn't exist
-                tracklet.mean_feature.extend(out_features[index])
+            # Initialize a new tracklet
+                tracklet = Tracklet()
+                tracklet.mean_feature.extend(feature)
                 tracklet.status = 'Active'
                 tracklet.start_time = sae_msg.frame.timestamp_utc_ms
                 tracklet.end_time = sae_msg.frame.timestamp_utc_ms
-                tracklet.age = int(age)
 
-                # for detection_info
-                #NOTE: double-check if it is necessary to add the detection information
+                # Add detection information
                 detection = tracklet.detections_info.add()
-                detection.bounding_box.min_x = float(x1) / width
-                detection.bounding_box.min_y = float(y1) / height
-                detection.bounding_box.max_x = float(x2) / width
-                detection.bounding_box.max_y = float(y2) / height
+                detection.bounding_box.min_x = float(x1) 
+                detection.bounding_box.min_y = float(y1) 
+                detection.bounding_box.max_x = float(x2) 
+                detection.bounding_box.max_y = float(y2) 
                 detection.confidence = confidence
                 detection.class_id = int(class_id)
-                detection.feature.extend(out_features[index])
+                detection.feature.extend(feature)
+                detection.geo_coordinate.latitude = lat
+                detection.geo_coordinate.longitude = lon
 
-                # Add the new tracklet to the tracklets map
+                # Save the new tracklet to the camera
                 sae_msg.trajectory.cameras[stream_id].tracklets[track_id].CopyFrom(tracklet)
-            
+            else:
+                tracklet = sae_msg.trajectory.cameras[stream_id].tracklets[track_id]
+                tracklet.start_time = sae_msg.frame.timestamp_utc_ms
+                tracklet.end_time = sae_msg.frame.timestamp_utc_ms
+
+               # Optionally update detection info if needed (commented here)
+                detection = tracklet.detections_info.add()
+                detection.bounding_box.min_x = float(x1) 
+                detection.bounding_box.min_y = float(y1) 
+                detection.bounding_box.max_x = float(x2) 
+                detection.bounding_box.max_y = float(y2) 
+                detection.confidence = confidence
+                detection.class_id = int(class_id)
+                detection.feature.extend(feature)
+                detection.geo_coordinate.latitude = lat
+                detection.geo_coordinate.longitude = lon
+
+                print(f"[DEBUG] Updated tracklet {track_id}: end_time={tracklet.end_time}")
         return sae_msg 
 
     
@@ -276,6 +298,8 @@ class Tracker:
 
             detection.confidence = float(pred[5])
             detection.class_id = int(pred[6])
+            detection.geo_coordinate.latitude = float(pred[8])
+            detection.geo_coordinate.longitude = float(pred[9])
 
         output_sae_msg.metrics.CopyFrom(input_sae_msg.metrics)
         output_sae_msg.metrics.tracking_inference_time_us = inference_time_us

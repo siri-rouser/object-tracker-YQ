@@ -1,6 +1,6 @@
-FROM python:3.10-slim as build
+FROM python:3.10-slim AS build
 
-ADD "https://drive.google.com/uc?id=1Kkx2zW89jq_NETu4u42CFZTMVD5Hwm6e" /code/osnet_x0_25_msmt17.pt
+# ADD "https://drive.google.com/uc?id=1Kkx2zW89jq_NETu4u42CFZTMVD5Hwm6e" /code/osnet_x0_25_msmt17.pt
 
 RUN apt update && apt install --no-install-recommends -y \
     curl \
@@ -16,7 +16,7 @@ ENV PATH="${POETRY_HOME}/bin:${PATH}"
 COPY poetry.lock poetry.toml pyproject.toml /code/
 
 WORKDIR /code
-RUN poetry install
+RUN poetry install --no-root
     
 # Copy the rest of the project
 COPY . /code/
@@ -34,3 +34,5 @@ COPY --from=build /code /code
 WORKDIR /code
 ENV PATH="/code/.venv/bin:$PATH"
 CMD [ "python", "main.py" ]
+
+# RUN: docker build -t mcvy_yq/object-tracker:v1.0 .
