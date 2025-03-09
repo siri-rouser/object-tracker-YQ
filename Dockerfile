@@ -1,11 +1,19 @@
-FROM python:3.10-slim AS build
+FROM python:3.10-slim-bullseye as build
 
 # ADD "https://drive.google.com/uc?id=1Kkx2zW89jq_NETu4u42CFZTMVD5Hwm6e" /code/osnet_x0_25_msmt17.pt
 
 RUN apt update && apt install --no-install-recommends -y \
     curl \
     git \
-    build-essential
+    python3-dev \
+    gcc \
+    g++ \
+    build-essential \
+    libglib2.0-0 \
+    libgl1 \
+    libjpeg-dev \
+    libgl1 \
+    libturbojpeg0
 
 ARG POETRY_VERSION
 ENV POETRY_HOME=/opt/poetry
@@ -21,18 +29,8 @@ RUN poetry install --no-root
 # Copy the rest of the project
 COPY . /code/
 
-
-### Main artifact / deliverable image
-
-FROM python:3.10-slim
-RUN apt update && apt install --no-install-recommends -y \
-    libglib2.0-0 \
-    libgl1 \
-    libturbojpeg0
-
-COPY --from=build /code /code
 WORKDIR /code
 ENV PATH="/code/.venv/bin:$PATH"
 CMD [ "python", "main.py" ]
 
-# RUN: docker build -t mcvy_yq/object-tracker:v1.0 .
+# RUN: sudo docker build -t mcvy_yq/object_tracker_arm64:v1.0 --platform linux/arm64 .

@@ -1,64 +1,8 @@
 from objecttracker.SMILEtrack.SMILEtrack_Official.tracker.mc_SMILEtrack import SMILEtrack
-from objecttracker.SMILEtrack.SMILEtrack_Official.yolov7.utils.torch_utils import select_device
+# from objecttracker.SMILEtrack.SMILEtrack_Official.yolov7.utils.torch_utils import select_device
 import argparse
-import torch
+# import torch
 import numpy as np
-
-
-# parser.add_argument('--source', type=str, default='inference/images', help='source')  # file/folder, 0 for webcam
-# parser.add_argument('--weights', nargs='+', type=str, default='yolov7-e6e.pt', help='model.pt path(s)')
-# parser.add_argument("--benchmark", dest="benchmark", type=str, default='MOT17', help="benchmark to evaluate: MOT17 | MOT20")
-# parser.add_argument("--eval", dest="split_to_eval", type=str, default='test', help="split to evaluate: train | val | test")
-# parser.add_argument('--txt-dir', dest="txt_dir", type=str, default='yolov7_track_results', help='dir to save result txt files')
-
-# parser.add_argument('--img-size', type=int, default=1280, help='inference size (pixels)')
-# parser.add_argument('--conf-thres', type=float, default=0.2, help='object confidence threshold')
-# parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
-# parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-# parser.add_argument('--view-img', action='store_true', help='display results')
-
-# parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --class 0, or --class 0 2 3')
-# parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
-# parser.add_argument('--augment', action='store_true', help='augmented inference')
-# parser.add_argument("--fp16", dest="fp16", default=False, action="store_true", help="Adopting mix precision evaluating.")
-# parser.add_argument("--fuse", dest="fuse", default=False, action="store_true", help="Fuse conv and bn for testing.")
-
-# parser.add_argument('--project', default='runs/track', help='save results to project/name')
-# parser.add_argument('--name', default='exp', help='save results to project/name')
-# parser.add_argument('--trace', action='store_true', help='trace model')
-# parser.add_argument('--hide-labels-name', default=False, action='store_true', help='hide labels')
-
-# parser.add_argument("--default-parameters", dest="default_parameters", default=False, action="store_true", help="use the default parameters as in the paper")
-# parser.add_argument("--save-frames", dest="save_frames", default=False, action="store_true", help="save sequences with tracks.")
-
-# # tracking args
-# parser.add_argument("--track_high_thresh", type=float, default=0.5, help="tracking confidence threshold")
-# parser.add_argument("--track_low_thresh", default=0.45, type=float, help="lowest detection threshold")
-# parser.add_argument("--new_track_thresh", default=0.6, type=float, help="new track thresh")
-# parser.add_argument("--track_buffer", type=int, default=30, help="the frames for keep lost tracks")
-# parser.add_argument("--match_thresh", type=float, default=0.8, help="matching threshold for tracking")
-# parser.add_argument("--aspect_ratio_thresh", type=float, default=1.6,
-#                     help="threshold for filtering out boxes of which aspect ratio are above the given value.")
-# parser.add_argument('--min_box_area', type=float, default=10, help='filter out tiny boxes')
-# parser.add_argument("--fuse-score", dest="mot20", default=False, action="store_true",
-#                     help="fuse score and iou for association")
-
-# # CMC
-# parser.add_argument("--cmc-method", default="file", type=str, help="cmc method: files (Vidstab GMC) | sparseOptFlow |orb | ecc")
-# parser.add_argument("--ablation", dest="ablation", default=False, action="store_true", help="ablation ")
-
-# # ReID
-# parser.add_argument("--with-reid", dest="with_reid", default=False, action="store_true", help="with ReID module.")
-# parser.add_argument("--fast-reid-config", dest="fast_reid_config", default=r"fast_reid/configs/MOT17/sbs_S50.yml",
-#                     type=str, help="reid config file path")
-# parser.add_argument("--fast-reid-weights", dest="fast_reid_weights", default=r"pretrained/mot17_sbs_S50.pth",
-#                     type=str, help="reid config file path")
-# parser.add_argument('--proximity_thresh', type=float, default=0.5,
-#                     help='threshold for rejecting low overlap reid matches')
-# parser.add_argument('--appearance_thresh', type=float, default=0.25,
-#                     help='threshold for rejecting low appearance similarity reid matches')
-
-
 
 class Modified_Tracker:
     tracker = None

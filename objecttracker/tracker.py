@@ -1,5 +1,5 @@
 import logging
-import objecttracker.Modified_Deepsort
+# import objecttracker.Modified_Deepsort
 import time
 import uuid
 from pathlib import Path
@@ -8,7 +8,7 @@ from typing import List, Tuple
 import numpy as np
 import cv2
 import objecttracker.Modified_SMILEtrack
-import torch
+# import torch
 # from boxmot import OCSORT, DeepOCSORT
 from prometheus_client import Counter, Histogram, Summary
 from visionlib.pipeline.tools import get_raw_frame_data
@@ -40,7 +40,7 @@ class Tracker:
         return self.get(input_proto)
 
     @GET_DURATION.time()
-    @torch.no_grad()
+    # @torch.no_grad()
     def get(self, input_proto,stream_id) -> List[Tuple[str, bytes]]:       
 
         input_image, sae_msg = self._unpack_proto(input_proto)
