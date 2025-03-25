@@ -252,7 +252,8 @@ class Tracker:
                 detection.feature.extend(feature)
                 detection.geo_coordinate.latitude = lat
                 detection.geo_coordinate.longitude = lon
-
+                detection.timestamp_utc_ms = sae_msg.frame.timestamp_utc_ms
+                
                 # Save the new tracklet to the camera
                 sae_msg.trajectory.cameras[stream_id].tracklets[track_id].CopyFrom(tracklet)
             else:
@@ -271,6 +272,7 @@ class Tracker:
                 detection.feature.extend(feature)
                 detection.geo_coordinate.latitude = lat
                 detection.geo_coordinate.longitude = lon
+                detection.timestamp_utc_ms = sae_msg.frame.timestamp_utc_ms
 
                 print(f"[DEBUG] Updated tracklet {track_id}: end_time={tracklet.end_time}")
         return sae_msg 
