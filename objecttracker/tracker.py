@@ -215,45 +215,91 @@ class Tracker:
             
         return tracking_output_array,features
 
-    def _tracklet_info_update(self,stream_id,tracking_output_array,out_features,input_image,sae_msg: SaeMessage):
-        '''
-        This function serves tracking_output from the tracker at first and saves the tracklet information to SaeMessgae.trajectory of current saeframe!!!
-        '''
-        height = input_image.shape[0]
-        width = input_image.shape[1]
-        
+    def _tracklet_info_update(self, stream_id, tracking_output_array, out_features, input_image, sae_msg: SaeMessage):
+        """
+        Updates the tracklet information in the SaeMessage.trajectory for the current frame.
+
+        Args:
+            stream_id (str): The ID of the camera stream.
+            tracking_output_array (np.ndarray): Array containing tracking outputs.
+            out_features (list): List of feature vectors for each tracked object.
+            input_image (np.ndarray): The input image.
+            sae_msg (SaeMessage): The SaeMessage object to update.
+
+        Returns:
+            SaeMessage: Updated SaeMessage with tracklet information.
+        """
+        height, width = input_image.shape[:2]
+        save_path = self.config.save_config.save_path if self.config.save_config.save else None
+
+        # Initialize the camera's tracklets in the trajectory
         sae_msg.trajectory.cameras[stream_id].CopyFrom(TrackletsByCamera())
 
-        for index,output_array in enumerate(tracking_output_array):
-            x1, y1, x2, y2, track_id, confidence, class_id, age, lat, lon = output_array
-            feature = out_features[index]
-            track_id = str(track_id)
-            # Initialize a new tracklet
-            tracklet = Tracklet()
-            tracklet.mean_feature.extend(feature)
-            tracklet.status = 'Active'
-            tracklet.start_time = sae_msg.frame.timestamp_utc_ms
-            tracklet.end_time = sae_msg.frame.timestamp_utc_ms
+        if save_path:
+            with open(save_path, "a") as f:
+                for index, output_array in enumerate(tracking_output_array):
+                    x1, y1, x2, y2, track_id, confidence, class_id, age, lat, lon = output_array
+                    feature = out_features[index]
+                    track_id_str = str(track_id)
 
-            # Add detection information
-            detection = tracklet.detections_info.add()
-            detection.bounding_box.min_x = float(x1) 
-            detection.bounding_box.min_y = float(y1) 
-            detection.bounding_box.max_x = float(x2) 
-            detection.bounding_box.max_y = float(y2) 
-            detection.confidence = confidence
-            detection.class_id = int(class_id)
-            detection.feature.extend(feature)
-            detection.geo_coordinate.latitude = lat
-            detection.geo_coordinate.longitude = lon
-            detection.timestamp_utc_ms = sae_msg.frame.timestamp_utc_ms
-            detection.frame_id = sae_msg.frame.frame_id
-            
-            # Save the new tracklet to the camera
-            sae_msg.trajectory.cameras[stream_id].tracklets[track_id].CopyFrom(tracklet)
+                    # Create and populate a new tracklet
+                    tracklet = Tracklet()
+                    tracklet.mean_feature.extend(feature)
+                    tracklet.status = "Active"
+                    tracklet.start_time = sae_msg.frame.timestamp_utc_ms
+                    tracklet.end_time = sae_msg.frame.timestamp_utc_ms
 
-        return sae_msg 
-    
+                    # Add detection information to the tracklet
+                    detection = tracklet.detections_info.add()
+                    detection.bounding_box.min_x = float(x1)
+                    detection.bounding_box.min_y = float(y1)
+                    detection.bounding_box.max_x = float(x2)
+                    detection.bounding_box.max_y = float(y2)
+                    detection.confidence = float(confidence)
+                    detection.class_id = int(class_id)
+                    detection.feature.extend(feature)
+                    detection.geo_coordinate.latitude = float(lat)
+                    detection.geo_coordinate.longitude = float(lon)
+                    detection.timestamp_utc_ms = sae_msg.frame.timestamp_utc_ms
+                    detection.frame_id = sae_msg.frame.frame_id
+
+                    # Save the tracklet to the camera's tracklets
+                    sae_msg.trajectory.cameras[stream_id].tracklets[track_id_str].CopyFrom(tracklet)
+
+                    # Write tracking information to the save file
+                    line = f"{sae_msg.frame.frame_id} {track_id_str} {x1 * width:.2f} {y1 * height:.2f} {x2 * width:.2f} {y2 * height:.2f} {class_id}"
+                    f.write(line + "\n")
+        else:
+            for index, output_array in enumerate(tracking_output_array):
+                x1, y1, x2, y2, track_id, confidence, class_id, age, lat, lon = output_array
+                feature = out_features[index]
+                track_id_str = str(track_id)
+
+                # Create and populate a new tracklet
+                tracklet = Tracklet()
+                tracklet.mean_feature.extend(feature)
+                tracklet.status = "Active"
+                tracklet.start_time = sae_msg.frame.timestamp_utc_ms
+                tracklet.end_time = sae_msg.frame.timestamp_utc_ms
+
+                # Add detection information to the tracklet
+                detection = tracklet.detections_info.add()
+                detection.bounding_box.min_x = float(x1)
+                detection.bounding_box.min_y = float(y1)
+                detection.bounding_box.max_x = float(x2)
+                detection.bounding_box.max_y = float(y2)
+                detection.confidence = float(confidence)
+                detection.class_id = int(class_id)
+                detection.feature.extend(feature)
+                detection.geo_coordinate.latitude = float(lat)
+                detection.geo_coordinate.longitude = float(lon)
+                detection.timestamp_utc_ms = sae_msg.frame.timestamp_utc_ms
+                detection.frame_id = sae_msg.frame.frame_id
+
+                # Save the tracklet to the camera's tracklets
+                sae_msg.trajectory.cameras[stream_id].tracklets[track_id_str].CopyFrom(tracklet)
+
+        return sae_msg
     @PROTO_SERIALIZATION_DURATION.time()
     def _create_output(self, tracking_output, input_sae_msg: SaeMessage, inference_time_us):
         output_sae_msg = SaeMessage()
@@ -277,6 +323,7 @@ class Tracker:
             detection.class_id = int(pred[6])
             detection.geo_coordinate.latitude = float(pred[8])
             detection.geo_coordinate.longitude = float(pred[9])
+            detection.frame_id = input_sae_msg.frame.frame_id
 
         output_sae_msg.metrics.CopyFrom(input_sae_msg.metrics)
         output_sae_msg.metrics.tracking_inference_time_us = inference_time_us

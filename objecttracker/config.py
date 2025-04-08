@@ -72,6 +72,10 @@ class SmileTrackConfig(BaseModel):
     match_thresh: float
     frame_rate: int
 
+class Save_Config(BaseModel):
+    save: bool
+    save_path: str
+
 class ObjectTrackerConfig(BaseSettings):
     log_level: LogLevel = LogLevel.WARNING
     tracker_config: Union[DeepOcSortConfig, OcSortConfig,DeepSortConfig,SmileTrackConfig]
@@ -79,6 +83,7 @@ class ObjectTrackerConfig(BaseSettings):
     redis: RedisConfig
     prometheus_port: conint(gt=1024, le=65536) = 8000
     model_config = SettingsConfigDict(env_nested_delimiter='__')
+    save_config: Save_Config
     
 
     @classmethod
