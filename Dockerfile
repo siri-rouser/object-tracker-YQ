@@ -35,4 +35,4 @@ WORKDIR /code
 ENV PATH="/code/.venv/bin:$PATH"
 CMD [ "python", "main.py" ]
 
-# RUN: docker build -t mcvy_yq/object-tracker:v1.0 .
+# RUN: docker build -t sirirouser/object-tracker:v1.0 .

@@ -1,4 +1,4 @@
-from objecttracker.SMILEtrack.SMILEtrack_Official.tracker.mc_SMILEtrack import SMILEtrack
+from objecttracker.SMILEtrack.SMILEtrack_Official.tracker.mc_SMILEtrack_test import SMILEtrack
 from objecttracker.SMILEtrack.SMILEtrack_Official.yolov7.utils.torch_utils import select_device
 import argparse
 import torch
@@ -77,8 +77,10 @@ class Modified_Tracker:
         opt.track_buffer = track_buffer
         opt.proximity_thresh = proximity_thresh
         opt.appearance_thresh = appearance_thresh
-        opt.with_reid = False
+        opt.with_reid = True
         opt.match_thresh = match_thresh
+        opt.cmc_method = 'file'
+        opt.mot20 = False
 
         self.tracker = SMILEtrack(opt,frame_rate) # tracker initalized
 
@@ -100,6 +102,7 @@ class Modified_Tracker:
             # Create a new array for each detection
             lat,lon = det_array[bbox_id,6], det_array[bbox_id,7]
             det = np.array([x_min, y_min, x_max, y_max, confidence[bbox_id], class_ids[bbox_id],lat,lon])
+            
             # Append the detection and the features
             if len(feats[bbox_id]) != 2048: #the recheck of feats dimension
                 print('??? feature dimension is not equal to 2048x1')
