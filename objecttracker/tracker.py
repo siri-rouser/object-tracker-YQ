@@ -35,6 +35,8 @@ class Tracker:
         logger.setLevel(self.config.log_level.value)
         self.object_id_seed = uuid.uuid4()
         self._setup()
+        self.height = None
+        self.width = None
         
     def __call__(self, input_proto, *args, **kwargs) -> Any:
         return self.get(input_proto)
@@ -44,10 +46,14 @@ class Tracker:
     def get(self, input_proto,stream_id) -> List[Tuple[str, bytes]]:       
 
         input_image, sae_msg = self._unpack_proto(input_proto)
+
+        if self.height is None or self.width is None:
+            self.height = input_image.shape[0]
+            self.width = input_image.shape[1]
         
         inference_start = time.monotonic_ns()
         tracking_output_array = np.array([])
-        det_array,bbox,confidence,feats,class_ids = self._prepare_detection_input(sae_msg,input_image)
+        det_array,bbox,confidence,feats,class_ids = self._prepare_detection_input(sae_msg)
         
         with MODEL_DURATION.time():
             if self.config.tracker_algorithm == TrackingAlgorithm.DEEPOCSORT:
@@ -56,16 +62,16 @@ class Tracker:
                 self.tracker.update(bbox, confidence, feats,class_ids,stream_id)
                 tracking_output_array, out_features = self._trackingreusltprocess()
             elif self.config.tracker_algorithm == TrackingAlgorithm.SMILETRACK:
-                self.tracker.update(bbox,confidence,feats,class_ids,input_image,det_array)
+                self.tracker.update(bbox,confidence,feats,class_ids,input_image,det_array,frame_id=sae_msg.frame.frame_id)
                 tracking_output_array, out_features = self._trackingreusltprocess1()
 
         if self.config.tracker_config.multi_camera_tracking:
-            sae_msg = self._tracklet_info_update(stream_id,tracking_output_array,out_features,input_image,sae_msg)
+            sae_msg = self._tracklet_info_update(stream_id,tracking_output_array,out_features,sae_msg)
 
         OBJECT_COUNTER.inc(len(tracking_output_array))
         
         inference_time_us = (time.monotonic_ns() - inference_start) // 1000
-        return self._create_output(tracking_output_array, sae_msg, inference_time_us,input_image)
+        return self._create_output(tracking_output_array, sae_msg, inference_time_us)
         
     def _setup(self):
         conf = self.config.tracker_config
@@ -131,7 +137,7 @@ class Tracker:
 
         return input_image, sae_msg
     
-    def _prepare_detection_input(self,sae_msg: SaeMessage,img):
+    def _prepare_detection_input(self,sae_msg: SaeMessage):
         '''
         This function serves SaeMessage as input
         returns det_arrray (contains detection information with sequence!)
@@ -139,9 +145,6 @@ class Tracker:
 
         separately
         '''
-
-        width = img.shape[1]
-        heigh = img.shape[0]
         bbox = []
         confidence = []
         feats = []
@@ -154,10 +157,10 @@ class Tracker:
             min_y = detection.bounding_box.min_y * image_shape[0]
             max_y = detection.bounding_box.max_y * image_shape[0]
             '''
-            min_x = detection.bounding_box.min_x * width
-            max_x = detection.bounding_box.max_x * width
-            min_y = detection.bounding_box.min_y * heigh
-            max_y = detection.bounding_box.max_y * heigh           
+            min_x = detection.bounding_box.min_x * self.width
+            max_x = detection.bounding_box.max_x * self.width
+            min_y = detection.bounding_box.min_y * self.height
+            max_y = detection.bounding_box.max_y * self.height           
             w = max_x - min_x
             h = max_y - min_y
             bbox.append((min_x, min_y, w, h))
@@ -166,36 +169,31 @@ class Tracker:
             feats.append(detection.feature)
             class_ids.append(detection.class_id)
 
-            det_array[idx, 0] = detection.bounding_box.min_x * width
-            det_array[idx, 1] = detection.bounding_box.min_y * heigh
-            det_array[idx, 2] = detection.bounding_box.max_x * width
-            det_array[idx, 3] = detection.bounding_box.max_y * heigh
+            det_array[idx, 0] = detection.bounding_box.min_x * self.width
+            det_array[idx, 1] = detection.bounding_box.min_y * self.height
+            det_array[idx, 2] = detection.bounding_box.max_x * self.width
+            det_array[idx, 3] = detection.bounding_box.max_y * self.height
             det_array[idx, 4] = detection.confidence
             det_array[idx, 5] = detection.class_id
             det_array[idx, 6] = detection.geo_coordinate.latitude
             det_array[idx, 7] = detection.geo_coordinate.longitude
-            # logger.info(detection)
-
-            # det_array[idx, 6] = detection.feature
-            # logger.info(f'feature extract with shape{len(detection.feature)}')
-            # logger.info(detection.feature)
         return det_array,bbox,confidence,feats,class_ids
     
-    def _trackingreusltprocess(self):
-        tracking_output_array = np.zeros((len(self.tracker.tracks), 8))
-        features = []
-        for index, track in enumerate(self.tracker.tracks):
-            x, y, w, h = track.bbox
-            x1, y1, x2, y2 = x, y, x + w, y + h
-            x1, y1 = max(x1, 0), max(y1, 0)
-            track_id = track.track_id
-            features.append(track.feat)
-            confidence = track.confidence
-            class_id = track.class_id
-            age = track.age
-            tracking_output_array[index] = np.array([x1, y1, x2, y2, track_id, confidence,class_id, age])
+    # def _trackingreusltprocess(self):
+    #     tracking_output_array = np.zeros((len(self.tracker.tracks), 8))
+    #     features = []
+    #     for index, track in enumerate(self.tracker.tracks):
+    #         x, y, w, h = track.bbox
+    #         x1, y1, x2, y2 = x, y, x + w, y + h
+    #         x1, y1 = max(x1, 0), max(y1, 0)
+    #         track_id = track.track_id
+    #         features.append(track.feat)
+    #         confidence = track.confidence
+    #         class_id = track.class_id
+    #         age = track.age
+    #         tracking_output_array[index] = np.array([x1, y1, x2, y2, track_id, confidence,class_id, age])
         
-        return tracking_output_array,features
+    #     return tracking_output_array,features
     
     def _trackingreusltprocess1(self):
         tracking_output_array = np.zeros((len(self.tracker.tracks), 10))
@@ -215,7 +213,7 @@ class Tracker:
             
         return tracking_output_array,features
 
-    def _tracklet_info_update(self, stream_id, tracking_output_array, out_features, input_image, sae_msg: SaeMessage):
+    def _tracklet_info_update(self, stream_id, tracking_output_array, out_features, sae_msg: SaeMessage):
         """
         Updates the tracklet information in the SaeMessage.trajectory for the current frame.
 
@@ -229,7 +227,6 @@ class Tracker:
         Returns:
             SaeMessage: Updated SaeMessage with tracklet information.
         """
-        height, width = input_image.shape[:2]
         save_path = self.config.save_config.save_path if self.config.save_config.save else None
 
         # Initialize the camera's tracklets in the trajectory
@@ -251,10 +248,10 @@ class Tracker:
 
                     # Add detection information to the tracklet
                     detection = tracklet.detections_info.add()
-                    detection.bounding_box.min_x = float(x1) / width
-                    detection.bounding_box.min_y = float(y1) / height
-                    detection.bounding_box.max_x = float(x2) / width
-                    detection.bounding_box.max_y = float(y2) / height
+                    detection.bounding_box.min_x = float(x1) / self.width
+                    detection.bounding_box.min_y = float(y1) / self.height
+                    detection.bounding_box.max_x = float(x2) / self.width
+                    detection.bounding_box.max_y = float(y2) / self.height
                     detection.confidence = float(confidence)
                     detection.class_id = int(class_id)
                     detection.feature.extend(feature)
@@ -284,10 +281,10 @@ class Tracker:
 
                 # Add detection information to the tracklet
                 detection = tracklet.detections_info.add()
-                detection.bounding_box.min_x = float(x1) / width
-                detection.bounding_box.min_y = float(y1) / height
-                detection.bounding_box.max_x = float(x2) / width
-                detection.bounding_box.max_y = float(y2) / height
+                detection.bounding_box.min_x = float(x1) / self.width
+                detection.bounding_box.min_y = float(y1) / self.height
+                detection.bounding_box.max_x = float(x2) / self.width
+                detection.bounding_box.max_y = float(y2) / self.height
                 detection.confidence = float(confidence)
                 detection.class_id = int(class_id)
                 detection.feature.extend(feature)
@@ -301,8 +298,7 @@ class Tracker:
 
         return sae_msg
     @PROTO_SERIALIZATION_DURATION.time()
-    def _create_output(self, tracking_output, input_sae_msg: SaeMessage, inference_time_us,input_image) -> bytes:
-        height, width = input_image.shape[:2]
+    def _create_output(self, tracking_output, input_sae_msg: SaeMessage, inference_time_us) -> bytes:
         output_sae_msg = SaeMessage()
         output_sae_msg.frame.CopyFrom(input_sae_msg.frame)
         output_sae_msg.trajectory.CopyFrom(input_sae_msg.trajectory)
@@ -312,10 +308,10 @@ class Tracker:
         # Therefore, we can only reuse the VideoFrame and have to recreate everything else
         for pred in tracking_output:
             detection = output_sae_msg.detections.add()
-            detection.bounding_box.min_x = float(pred[0]) / width
-            detection.bounding_box.min_y = float(pred[1]) / height
-            detection.bounding_box.max_x = float(pred[2]) / width
-            detection.bounding_box.max_y = float(pred[3]) / height
+            detection.bounding_box.min_x = float(pred[0]) / self.width
+            detection.bounding_box.min_y = float(pred[1]) / self.height
+            detection.bounding_box.max_x = float(pred[2]) / self.width
+            detection.bounding_box.max_y = float(pred[3]) / self.height
 
             # detection.object_id = uuid.uuid3(self.object_id_seed, str(int(pred[4]))).bytes
             detection.object_id = int(pred[4])
@@ -324,6 +320,7 @@ class Tracker:
             detection.class_id = int(pred[6])
             detection.geo_coordinate.latitude = float(pred[8])
             detection.geo_coordinate.longitude = float(pred[9])
+            detection.timestamp_utc_ms = input_sae_msg.frame.timestamp_utc_ms
             detection.frame_id = input_sae_msg.frame.frame_id
 
         output_sae_msg.metrics.CopyFrom(input_sae_msg.metrics)

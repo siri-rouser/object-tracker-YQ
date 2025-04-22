@@ -84,11 +84,11 @@ class Modified_Tracker:
 
         self.tracker = SMILEtrack(opt,frame_rate) # tracker initalized
 
-    def update(self,bboxs,confidence,feats,class_ids,img,det_array):
+    def update(self,bboxs,confidence,feats,class_ids,img,det_array,frame_id):
 
         if len(bboxs) == 0:
            # self.tracker.predict() SIMLEtrack do not have .predict() function
-            self.tracker.update([],img)  
+            self.tracker.update([],img,frame_id)  
             self.update_tracks([])
             return
         
@@ -114,7 +114,7 @@ class Modified_Tracker:
         detections = np.array(detections)
 
        # self.tracker.predict()
-        temp_results = self.tracker.update(detections,img)
+        temp_results = self.tracker.update(detections,img,frame_id)
     #    matched_feature = self.result_match(bboxs,feats)
         self.update_tracks(temp_results)
 
